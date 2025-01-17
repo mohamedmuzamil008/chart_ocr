@@ -14,7 +14,7 @@ target_window_keyword = "AmiBroker"
 
 # Logging function
 def log_error(message):
-    with open(save_dir / "error_log.txt", "a") as log_file:
+    with open(save_dir / "Chart_screenshot_error_log.txt", "a") as log_file:
         log_file.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {message}\n")
 
 

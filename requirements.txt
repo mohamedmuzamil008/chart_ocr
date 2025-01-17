@@ -4,3 +4,4 @@ openai
 pyautogui
 Opencv-python
 pandas
+python-dotenv

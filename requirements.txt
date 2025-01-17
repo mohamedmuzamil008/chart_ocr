@@ -3,3 +3,4 @@ pillow
 openai
 pyautogui
 Opencv-python
+pandas

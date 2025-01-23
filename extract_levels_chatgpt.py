@@ -7,11 +7,13 @@ import base64
 import argparse
 import time
 from dotenv import load_dotenv
+import pyautogui
 
 # Load environment variables from .env file
 load_dotenv()
 
 image_dir_base = r"E:\App Dev\GitHub\chart_ocr\data"
+reference_csv_path = None
 image_dir = None 
 
 # Logging function
@@ -28,7 +30,9 @@ def parse_arguments():
         args = parser.parse_args()
 
         global image_dir
-        image_dir = Path(image_dir_base) / args.image_dir       
+        global reference_csv_path
+        image_dir = Path(image_dir_base) / args.image_dir 
+        reference_csv_path = Path(image_dir_base)  / args.image_dir / "Amibroker_Input.csv"    
         return args
     
     except ValueError as e:
@@ -107,13 +111,15 @@ def get_levels_from_gpt(image_path):
     try:
         response_text = response.choices[0].message.content.strip()
         # Print response for debugging
-        #print(f"Raw response: {response_text}")
+        print(f"Raw response: {response_text}")
         
         #Remove the ```json at the start of the response_text
         response_text = response_text.replace("```json", "")
         response_text = response_text.replace("```plaintext", "")
         response_text = response_text.replace("```", "")
-        #print(f"Raw response after correction: {response_text}")
+        response_text = response_text.replace("{", "")
+        response_text = response_text.replace("}", "")
+        print(f"Raw response after correction: {response_text}")
         
         level_pairs = json.loads(response_text)
         # Convert list pairs to list of dictionaries
@@ -151,16 +157,111 @@ def process_images_to_csv(output_csv):
     df = pd.DataFrame(results)
     df = df.sort_values(by=['Symbol', 'Value'], ascending=[True, False])
     df.to_csv(output_csv, index=False)
+    return df
 
+def transform_dataframe(input_df, output_csv):
+
+    try:
+        # Load Amibroker INput CSV
+        if not Path(reference_csv_path).exists():
+            raise FileNotFoundError(f"Reference CSV not found at: {reference_csv_path}")
+            
+        reference_df = pd.read_csv(reference_csv_path)
+        
+        #Rename Stocks to Symbol in reference_df
+        reference_df.rename(columns={'Stocks': 'Symbol'}, inplace=True)
+
+        if 'Symbol' not in reference_df.columns:
+            raise ValueError("Reference CSV must contain 'Symbol' column")
+
+        # Filter out unwanted reference levels
+        filtered_df = input_df[~input_df['Key'].isin([
+            'pWk-Series-H', 'pWk-Series-L', 
+            'pMon-Series-H', 'pMon-Series-L'
+        ])]
+
+        symbols = input_df['Symbol'].unique()
+        
+        # Define ordered level types
+        ordered_levels = [
+            'VPoC', 'V-PPoC', 'SingleP', 
+            'PoorH', 'PoorL', 
+            'SwingH', 'SwingL', 
+            'ABPoorH', 'ABPoorL'
+        ]
+        
+        # Initialize dictionary with float type
+        result_dict = {'Symbol': symbols}
+        for level_type in ordered_levels:
+            for i in range(1, 6):
+                result_dict[f'{level_type}_{i}'] = 0.0
+        
+        # Create DataFrame with float64 dtype for numeric columns
+        result_df = pd.DataFrame(result_dict)
+        for level_type in ordered_levels:
+            for i in range(1, 6):
+                result_df[f'{level_type}_{i}'] = result_df[f'{level_type}_{i}'].astype('float64')
+        
+        # Fill values for each symbol and level type
+        for symbol in symbols:
+            symbol_data = input_df[input_df['Symbol'] == symbol]
+            
+            for level_type in ordered_levels:
+                level_values = symbol_data[symbol_data['Key'] == level_type]['Value'].nlargest(5).tolist()
+                level_values.extend([0.0] * (5 - len(level_values)))
+                
+                for i in range(5):
+                    result_df.loc[result_df['Symbol'] == symbol, f'{level_type}_{i+1}'] = float(level_values[i])
+             
+        # Join with reference CSV
+        final_df = pd.merge(
+            reference_df,
+            result_df,
+            on='Symbol',
+            how='left'
+        )
+
+        # Fill any NaN values from the merge with 0.0
+        numeric_columns = [col for col in final_df.columns if col != 'Symbol' and col != 'Date']
+        final_df[numeric_columns] = final_df[numeric_columns].fillna(0.0)
+        
+        # Save to CSV
+        final_df.to_csv(output_csv, index=False)
+        print(f"Output CSV saved to: {output_csv}")
+        return final_df
+
+    except pd.errors.EmptyDataError:
+        print("Amibroker Input CSV is empty")
+        log_error("Amibroker Input CSV is empty")
+        raise
+    except pd.errors.ParserError:
+        print("Error parsing reference CSV - check file format")
+        log_error("Error parsing reference CSV - check file format")
+        raise
+    except Exception as e:
+        print(f"Unexpected error while processing reference CSV: {str(e)}")
+        log_error(f"Unexpected error while processing reference CSV: {str(e)}")
+        raise
 
 def main():
 
     parse_arguments()
     
     output_csv = Path(image_dir) / "extracted_levels.csv"
+    output_transformed_csv = Path(image_dir) / "Amibroker_Input_2.csv"
     
-    process_images_to_csv(output_csv)
+    df = process_images_to_csv(output_csv)
     print(f"Processing complete. Results saved to {output_csv}")
+
+     # Add confirmation dialog
+    pyautogui.alert(
+        text=f'Initial CSV saved to {output_csv}.\nCheck the file and click OK to proceed with transformation.',
+        title='Review CSV',
+        button='OK'
+    )
+
+    df = pd.read_csv(output_csv)
+    transform_dataframe(df, output_transformed_csv)
 
 if __name__ == "__main__":
     main()

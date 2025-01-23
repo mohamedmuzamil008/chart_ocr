@@ -87,7 +87,7 @@ def parse_arguments():
         save_dir.mkdir(parents=True, exist_ok=True)
         
         # Validate symbols file exists
-        if not Path(Path(save_dir_base) / args.symbols_file).exists():
+        if not Path(Path(save_dir_base) / args.save_dir /args.symbols_file).exists():
             log_error(f"Symbols file not found: {args.symbols_file}")
             raise FileNotFoundError(f"Symbols file not found: {args.symbols_file}")
             
@@ -116,7 +116,7 @@ def main():
 
     args = parse_arguments()
 
-    symbols = pd.read_csv(Path(save_dir_base) / args.symbols_file)["Symbol"].tolist()
+    symbols = pd.read_csv(Path(save_dir_base) / args.save_dir /args.symbols_file)["Symbol"].tolist()
     
     # Activate the AmiBroker window
     amibroker_window = find_and_activate_amibroker_window(target_window_keyword)

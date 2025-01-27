@@ -8,10 +8,12 @@ import argparse
 import time
 from dotenv import load_dotenv
 import pyautogui
+import re
 
 # Load environment variables from .env file
 load_dotenv()
 
+input_dir_base = r"E:\App Dev 2\Data"
 image_dir_base = r"E:\App Dev\GitHub\chart_ocr\data"
 reference_csv_path = None
 image_dir = None 
@@ -32,7 +34,7 @@ def parse_arguments():
         global image_dir
         global reference_csv_path
         image_dir = Path(image_dir_base) / args.image_dir 
-        reference_csv_path = Path(image_dir_base)  / args.image_dir / "Amibroker_Input.csv"    
+        reference_csv_path = Path(input_dir_base)  / args.image_dir / "Amibroker_Input.csv"    
         return args
     
     except ValueError as e:
@@ -89,12 +91,12 @@ def get_levels_from_gpt(image_path):
                         If multiple levels are marked to a single value, (e.g., pMon-Series-L, SwingL, PoorL), consider that value for each of the reference levels. 
                         
                         Exclude any levels or markings not extended to the right of the chart or unrelated to the task.  Also ignore the red, green and blue numbers present in the price index. 
-                         Focus only on solid yellow levels clearly extended to the right side near the price column. Ignore the dotted yellow lines. Ignore noise, labels, or annotations that do not match the specified format.
+                        Focus only on solid yellow levels clearly extended to the right side near the price column. Ignore the dotted yellow lines. Ignore noise, labels, or annotations that do not match the specified format.
                         Output format:
-                        {
-                            [[\"VPoC\", 372], [\"VPoC\", 360], [\"PoorL\", 358], [\"PoorH\", 379], [\"SwingL\", 362], [\"SwingH\", 381], [\"ABPoorH\", 383], [\"ABPoorL\", 364], [\"SingleP\", 374], [\"SingleP\", 412], [\"pMon-Series-H\", 376], [\"pMon-Series-L\", 356], [\"pWk-Series-H\", 385], [\"pWk-Series-L\", 366]]
-                        }
-                        Don't add any additional sentences in the output. It has to strictly follow the Output format."""
+                        [[\"VPoC\", 372], [\"VPoC\", 360], [\"PoorL\", 358], [\"PoorH\", 379], [\"SwingL\", 362], [\"SwingH\", 381], [\"ABPoorH\", 383], [\"ABPoorL\", 364], [\"SingleP\", 374], [\"SingleP\", 412], [\"pMon-Series-H\", 376], [\"pMon-Series-L\", 356], [\"pWk-Series-H\", 385], [\"pWk-Series-L\", 366]]
+                        
+                        Don't add any additional sentences in the output. It has to strictly follow the Output format. Just provide the list.
+                        I repeat, don't add any extra wordings, newlines etc. STRICTLY FOLLOW THE FORMAT MENTIONED!"""
                     },
                     {
                         "type": "image_url",
@@ -111,7 +113,7 @@ def get_levels_from_gpt(image_path):
     try:
         response_text = response.choices[0].message.content.strip()
         # Print response for debugging
-        print(f"Raw response: {response_text}")
+        print(f"Raw response: {response_text}")        
         
         #Remove the ```json at the start of the response_text
         response_text = response_text.replace("```json", "")
@@ -119,14 +121,32 @@ def get_levels_from_gpt(image_path):
         response_text = response_text.replace("```", "")
         response_text = response_text.replace("{", "")
         response_text = response_text.replace("}", "")
-        print(f"Raw response after correction: {response_text}")
+
+        # Remove newlines and normalize spaces
+        response_text = re.sub(r'\s+', ' ', response_text)
+
+        list_pattern = r'\[\[(.*?)\]\]'
+        match = re.search(list_pattern, response_text)
         
-        level_pairs = json.loads(response_text)
-        # Convert list pairs to list of dictionaries
-        results = []
-        for key, value in level_pairs:
-            results.append({'Key': key, 'Value': value})
-        return results
+        if match:            
+            list_content = f"[[{match.group(1)}]]"
+            # Remove any extra spaces between elements
+            list_content = re.sub(r'\s*,\s*', ',', list_content)
+            print(f"Raw response after correction: {list_content}")
+            #Print a new line
+            print("\n")
+            level_pairs = json.loads(list_content)
+            
+            # Convert list pairs to list of dictionaries
+            results = []
+            for key, value in level_pairs:
+                results.append({'Key': key, 'Value': value})
+            return results
+
+        else:
+            print("No valid list found in response")
+            log_error("No valid list found in response")
+            return {"error": "Invalid response format"}        
         
     except json.JSONDecodeError as e:
         print(f"Invalid JSON response: {response_text}")
@@ -159,7 +179,7 @@ def process_images_to_csv(output_csv):
     df.to_csv(output_csv, index=False)
     return df
 
-def transform_dataframe(input_df, output_csv):
+def transform_dataframe(input_df, output_csv, output_csv_2):
 
     try:
         # Load Amibroker INput CSV
@@ -215,7 +235,7 @@ def transform_dataframe(input_df, output_csv):
              
         # Join with reference CSV
         final_df = pd.merge(
-            reference_df,
+            reference_df[['Symbol', 'Date', 'VAH_prev', 'POC_prev', 'VAL_prev']],
             result_df,
             on='Symbol',
             how='left'
@@ -225,8 +245,19 @@ def transform_dataframe(input_df, output_csv):
         numeric_columns = [col for col in final_df.columns if col != 'Symbol' and col != 'Date']
         final_df[numeric_columns] = final_df[numeric_columns].fillna(0.0)
         
+        # After creating final_df and before returning it, add:
+        unique_symbols = result_df['Symbol'].unique()
+        symbol_list = ','.join(unique_symbols)
+        
+        # Save to text file in the same directory as output_csv
+        symbol_file_path = Path(image_dir) / "unique_symbols.txt"
+        with open(symbol_file_path, 'w') as f:
+            f.write(symbol_list)    
+        print(f"Unique symbols saved to: {symbol_file_path}")
+
         # Save to CSV
         final_df.to_csv(output_csv, index=False)
+        final_df.to_csv(output_csv_2, index=False)
         print(f"Output CSV saved to: {output_csv}")
         return final_df
 
@@ -245,10 +276,11 @@ def transform_dataframe(input_df, output_csv):
 
 def main():
 
-    parse_arguments()
+    args = parse_arguments()
     
     output_csv = Path(image_dir) / "extracted_levels.csv"
     output_transformed_csv = Path(image_dir) / "Amibroker_Input_2.csv"
+    output_transformed_csv_2 = Path(input_dir_base) / args.image_dir / "Amibroker_Input_2.csv"
     
     df = process_images_to_csv(output_csv)
     print(f"Processing complete. Results saved to {output_csv}")
@@ -261,7 +293,9 @@ def main():
     )
 
     df = pd.read_csv(output_csv)
-    transform_dataframe(df, output_transformed_csv)
+    transform_dataframe(df, output_transformed_csv, output_transformed_csv_2)
+
+    
 
 if __name__ == "__main__":
     main()

@@ -5,7 +5,9 @@ import cv2
 import pygetwindow as gw
 import pandas as pd
 import argparse
+import shutil
 
+input_dir_base = r"E:\App Dev 2\Data"
 save_dir_base = r"E:\App Dev\GitHub\chart_ocr\data"
 save_dir = None 
 
@@ -87,9 +89,9 @@ def parse_arguments():
         save_dir.mkdir(parents=True, exist_ok=True)
         
         # Validate symbols file exists
-        if not Path(Path(save_dir_base) / args.save_dir /args.symbols_file).exists():
-            log_error(f"Symbols file not found: {args.symbols_file}")
-            raise FileNotFoundError(f"Symbols file not found: {args.symbols_file}")
+        if not Path(Path(input_dir_base) / args.save_dir /args.symbols_file).exists():
+            log_error(f"Symbols file not found at: {Path(input_dir_base) / args.save_dir /args.symbols_file}")
+            raise FileNotFoundError(f"Symbols file not found: {Path(input_dir_base) / args.save_dir /args.symbols_file}")
             
         # Validate symbols file is CSV
         if not args.symbols_file.lower().endswith('.csv'):
@@ -116,7 +118,11 @@ def main():
 
     args = parse_arguments()
 
-    symbols = pd.read_csv(Path(save_dir_base) / args.save_dir /args.symbols_file)["Symbol"].tolist()
+    #Copy symbols file from input_dir_base to save_dir_base
+    symbols_file = Path(input_dir_base) / args.save_dir /args.symbols_file
+    shutil.copy(symbols_file, save_dir / args.symbols_file)
+
+    symbols = pd.read_csv(Path(save_dir_base) / args.save_dir /args.symbols_file)["Ticker"].tolist()
     
     # Activate the AmiBroker window
     amibroker_window = find_and_activate_amibroker_window(target_window_keyword)

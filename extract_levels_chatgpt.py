@@ -179,7 +179,7 @@ def process_images_to_csv(output_csv):
     df.to_csv(output_csv, index=False)
     return df
 
-def transform_dataframe(input_df, output_csv, output_csv_2):
+def transform_dataframe(input_df, output_csv, output_csv_2, symbols_csv_path):
 
     try:
         # Load Amibroker INput CSV
@@ -255,6 +255,17 @@ def transform_dataframe(input_df, output_csv, output_csv_2):
             f.write(symbol_list)    
         print(f"Unique symbols saved to: {symbol_file_path}")
 
+        #Add Strategy ID to final_df
+        symbols_csv = pd.read_csv(symbols_csv_path)
+        symbols_csv.rename(columns={'Ticker': 'Symbol'}, inplace=True)
+
+        final_df = pd.merge(
+            final_df,
+            symbols_csv[['Symbol', 'Strategy ID Number']],
+            on='Symbol',
+            how='left'
+        )
+
         # Save to CSV
         final_df.to_csv(output_csv, index=False)
         final_df.to_csv(output_csv_2, index=False)
@@ -281,6 +292,8 @@ def main():
     output_csv = Path(image_dir) / "extracted_levels.csv"
     output_transformed_csv = Path(image_dir) / "Amibroker_Input_2.csv"
     output_transformed_csv_2 = Path(input_dir_base) / args.image_dir / "Amibroker_Input_2.csv"
+    symbols_csv = Path(input_dir_base) / args.image_dir / "Symbols.csv"
+    
     
     df = process_images_to_csv(output_csv)
     print(f"Processing complete. Results saved to {output_csv}")
@@ -293,7 +306,7 @@ def main():
     )
 
     df = pd.read_csv(output_csv)
-    transform_dataframe(df, output_transformed_csv, output_transformed_csv_2)
+    transform_dataframe(df, output_transformed_csv, output_transformed_csv_2, symbols_csv)
 
     
 

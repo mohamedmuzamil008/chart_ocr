@@ -40,7 +40,7 @@ def find_and_activate_amibroker_window(keyword):
 
 
 # Wait for the chart to load
-def wait_for_chart_load(timeout=7):
+def wait_for_chart_load(timeout=10):
     start_time = time.time()
     while time.time() - start_time < timeout:
         time.sleep(0.5)  # Poll every 500 ms
@@ -66,6 +66,9 @@ def select_symbol(amibroker_window, symbol):
 # Capture and save a screenshot
 def capture_screenshot(amibroker_window, symbol):
     try:
+        # Add a pyautogui confirmation box from user before capturing the screenshot
+        pyautogui.confirm(text='Confirm before capturing screenshot', title='Confirmation', buttons=['OK', 'Cancel'])
+
         x, y, width, height = amibroker_window.box
         screenshot = pyautogui.screenshot(region=(x+1570, y+140, 335, 830))
         screenshot.save(save_dir / f"{symbol}.jpg")
@@ -141,7 +144,7 @@ def main():
                 continue
 
             # Wait for the chart to load
-            if not wait_for_chart_load(timeout=7):  # Adjust timeout as needed
+            if not wait_for_chart_load(timeout=10):  # Adjust timeout as needed
                 log_error(f"Timeout while waiting for chart to load for {symbol}")
                 print(f"Error: Chart did not load for {symbol}. Skipping...")
                 continue

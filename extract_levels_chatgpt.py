@@ -292,9 +292,8 @@ def main():
     output_csv = Path(image_dir) / "extracted_levels.csv"
     output_transformed_csv = Path(image_dir) / "Amibroker_Input_2.csv"
     output_transformed_csv_2 = Path(input_dir_base) / args.image_dir / "Amibroker_Input_2.csv"
-    symbols_csv = Path(input_dir_base) / args.image_dir / "Symbols.csv"
-    
-    
+    symbols_csv = Path(input_dir_base) / args.image_dir / "Symbols_with_K.csv"
+        
     df = process_images_to_csv(output_csv)
     print(f"Processing complete. Results saved to {output_csv}")
 

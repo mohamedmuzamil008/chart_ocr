@@ -5,3 +5,4 @@ pyautogui
 Opencv-python
 pandas
 python-dotenv
+python-telegram-bot
